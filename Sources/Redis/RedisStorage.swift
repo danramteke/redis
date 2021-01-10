@@ -1,16 +1,16 @@
 import Vapor
 
 extension Application {
-    private struct RedisesStorageKey: StorageKey {
+    private struct RedisStorageKey: StorageKey {
         typealias Value = RedisStorage
     }
     var redisStorage: RedisStorage {
-        if self.storage[RedisesStorageKey.self] == nil {
+        if self.storage[RedisStorageKey.self] == nil {
             let redisStorage = RedisStorage()
-            self.storage[RedisesStorageKey.self] = redisStorage
+            self.storage[RedisStorageKey.self] = redisStorage
             self.lifecycle.use(RedisStorage.Lifecycle(redisStorage: redisStorage))
         }
-        return self.storage[RedisesStorageKey.self]!
+        return self.storage[RedisStorageKey.self]!
     }
 }
 
@@ -44,6 +44,10 @@ class RedisStorage {
     }
 
     func pool(for eventLoop: EventLoop, id redisID: RedisID) -> RedisConnectionPool {
+        self.lock.lock()
+        defer {
+            self.lock.unlock()
+        }
         let key = PoolKey(eventLoopKey: eventLoop.key, redisID: redisID)
         guard let pool = pools[key] else {
             fatalError("No redis found for id \(redisID), or the app may not have finished booting. Also, the eventLoop must be from Application's EventLoopGroup.")
@@ -77,7 +81,7 @@ extension RedisStorage {
                     let newPool = RedisConnectionPool(
                         configuration: .init(configuration, defaultLogger: application.logger),
                         boundEventLoop: eventLoop)
-
+                    newPool.activate()
                     newPools[newKey] = newPool
                 }
             }
