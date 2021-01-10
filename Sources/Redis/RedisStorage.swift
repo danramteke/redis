@@ -19,14 +19,11 @@ class RedisStorage {
     private var configurations: [RedisID: RedisConfiguration]
     fileprivate var pools: [PoolKey: RedisConnectionPool] {
         willSet {
-            if didBoot {
+            guard pools.isEmpty else {
                 fatalError("editing pools after application has booted is not supported")
-            } else {
-                didBoot = true
             }
         }
     }
-    private var didBoot: Bool = false
 
     init() {
         self.configurations = [:]
@@ -35,9 +32,15 @@ class RedisStorage {
     }
 
     func use(_ redisConfiguration: RedisConfiguration, as id: RedisID = .default) {
-        self.lock.lock()
-        defer { self.lock.unlock() }
         self.configurations[id] = redisConfiguration
+    }
+
+    func configuration(for id: RedisID = .default) -> RedisConfiguration? {
+        self.configurations[id]
+    }
+
+    func ids() -> Set<RedisID> {
+        Set(self.configurations.keys)
     }
 
     func pool(for eventLoop: EventLoop, id redisID: RedisID) -> RedisConnectionPool {
@@ -48,15 +51,7 @@ class RedisStorage {
         return pool
     }
 
-    func configuration(for id: RedisID = .default) -> RedisConfiguration? {
-        self.lock.lock()
-        defer { self.lock.unlock() }
-        return self.configurations[id]
-    }
 
-    func ids() -> Set<RedisID> {
-        return self.lock.withLock { Set(self.configurations.keys) }
-    }
 }
 
 extension RedisStorage {
@@ -76,11 +71,13 @@ extension RedisStorage {
             var newPools = [PoolKey: RedisConnectionPool]()
             for eventLoop in application.eventLoopGroup.makeIterator() {
                 for (redisID, configuration) in redisStorage.configurations {
+
+                    let newKey: PoolKey = PoolKey(eventLoopKey: eventLoop.key, redisID: redisID)
+
                     let newPool = RedisConnectionPool(
                         configuration: .init(configuration, defaultLogger: application.logger),
                         boundEventLoop: eventLoop)
 
-                    let newKey: PoolKey = PoolKey(eventLoopKey: eventLoop.key, redisID: redisID)
                     newPools[newKey] = newPool
                 }
             }
