@@ -44,10 +44,6 @@ class RedisStorage {
     }
 
     func pool(for eventLoop: EventLoop, id redisID: RedisID) -> RedisConnectionPool {
-        self.lock.lock()
-        defer {
-            self.lock.unlock()
-        }
         let key = PoolKey(eventLoopKey: eventLoop.key, redisID: redisID)
         guard let pool = pools[key] else {
             fatalError("No redis found for id \(redisID), or the app may not have finished booting. Also, the eventLoop must be from Application's EventLoopGroup.")
@@ -67,12 +63,12 @@ extension RedisStorage {
             self.redisStorage = redisStorage
         }
 
-        func willBoot(_ application: Application) throws {
+        func didBoot(_ application: Application) throws {
             self.redisStorage.lock.lock()
             defer {
                 self.redisStorage.lock.unlock()
             }
-            var newPools = [PoolKey: RedisConnectionPool]()
+            var newPools: [PoolKey: RedisConnectionPool] = [:]
             for eventLoop in application.eventLoopGroup.makeIterator() {
                 for (redisID, configuration) in redisStorage.configurations {
 
@@ -81,7 +77,7 @@ extension RedisStorage {
                     let newPool = RedisConnectionPool(
                         configuration: .init(configuration, defaultLogger: application.logger),
                         boundEventLoop: eventLoop)
-                    newPool.activate()
+
                     newPools[newKey] = newPool
                 }
             }
